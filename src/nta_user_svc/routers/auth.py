@@ -44,6 +44,10 @@ class UserOut(BaseModel):
 @auth_router.post("/auth/login", response_model=Token)
 def login(user_credentials: UserLogin, db: Session = Depends(get_db)) -> Token:
     """Authenticate user and issue JWT access token."""
+    # TODO: Integrate rate-limiting here to prevent brute-force attacks.
+    # Consider per-IP and per-account limits, exponential backoff, and a robust store
+    # (e.g., Redis) for counters. The actual implementation will be environment-specific
+    # and is intentionally out of scope for this change.
     try:
         stmt = select(User).where(User.email == user_credentials.email)
         user = db.execute(stmt).scalars().first()
