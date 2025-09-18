@@ -30,3 +30,45 @@ services:
 Security note
 
 - Passwords are hashed using bcrypt. Higher `PASSWORD_HASH_ROUNDS` increases security but also CPU cost during registration and authentication. Test and tune the value for your deployment.
+
+### JWT Configuration
+
+This service uses JSON Web Tokens (JWT) for authentication. The following environment variables control JWT behavior (these are required/used by `src/nta_user_svc/config.py`):
+
+- `JWT_SECRET` (string) — REQUIRED
+  - Secret key used to sign and verify JWTs. The application fails fast and raises an error at startup if this variable is not set.
+  - Recommendation: Use a long, random secret (at least 32 bytes) and protect it using your platform's secret management (do not commit it to version control).
+
+- `JWT_ALGORITHM` (string) — Optional, default: `HS256`
+  - Signing algorithm used by PyJWT. Default is HS256.
+
+- `JWT_EXP_HOURS` (int) — Optional, default: `24`
+  - Token expiration time in hours. Tokens include an `exp` claim set to the current time plus this value.
+
+Example `.env` (development only — do NOT commit real secrets):
+
+```
+# Development example
+JWT_SECRET=test-secret-key
+JWT_ALGORITHM=HS256
+JWT_EXP_HOURS=24
+```
+
+Example docker-compose snippet:
+
+```
+services:
+  nta_user_svc:
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=HS256
+      - JWT_EXP_HOURS=24
+```
+
+Security guidance:
+- Use a dedicated secret management solution in production (e.g., AWS Secrets Manager, HashiCorp Vault, Kubernetes Secrets).
+- Rotate `JWT_SECRET` periodically and plan rolling restarts for services that validate tokens.
+- Keep `JWT_EXP_HOURS` as low as practical for your use case; shorter lifetimes reduce risk from leaked tokens.
+
+Notes:
+- The application performs a fail-fast check for `JWT_SECRET` in `src/nta_user_svc/config.py` to avoid insecure runs without a signing key.
