@@ -221,3 +221,84 @@ Expected behavior:
 Notes:
 - Tokens are signed with `JWT_SECRET` using algorithm `JWT_ALGORITHM` and include an `exp` claim controlled by `JWT_EXP_HOURS`.
 - The implementation uses FastAPI's OAuth2PasswordBearer scheme and raises appropriate `401` responses for invalid credentials or tokens.
+
+---
+
+## Profile photo endpoints
+
+The service provides endpoints to upload and retrieve profile photos. These endpoints are mounted under the `/api` prefix.
+
+### GET /api/profiles/{user_id}/photo
+
+Return the profile photo for the given user.
+
+- Path: `/api/profiles/{user_id}/photo`
+- Method: `GET`
+- Authentication: Bearer token required (protected endpoint). The token must identify the same `user_id` being requested (owner-only access).
+
+Success response
+
+- HTTP Status: `200 OK`
+- Body: binary image file (the raw image bytes)
+- Headers:
+  - `Content-Type`: appropriate image MIME type (e.g. `image/jpeg`, `image/png`, `image/webp`)
+  - `Cache-Control`: `no-cache, no-store, must-revalidate`
+
+Example curl
+
+```
+curl -X GET "http://localhost:8000/api/profiles/123/photo" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  --output profile.jpg
+```
+
+Error responses
+
+- `401 Unauthorized` — authentication required or token invalid/expired
+- `403 Forbidden` — authenticated user is not the owner of the requested profile
+- `404 Not Found` — profile or profile photo not found
+- `500 Internal Server Error` — unexpected server-side error
+
+---
+
+### POST /api/profiles/{user_id}/photo/upload
+
+Upload or replace a user's profile photo.
+
+- Path: `/api/profiles/{user_id}/photo/upload`
+- Method: `POST`
+- Authentication: Bearer token required (only the profile owner may upload)
+- Request: `multipart/form-data` with a single file field named `file` (an uploaded image). Supported MIME types: `image/jpeg`, `image/png`, `image/webp`.
+- Size limit: controlled by `MAX_PHOTO_SIZE_BYTES` (default `1048576` bytes)
+
+Success response
+
+- HTTP Status: `200 OK`
+- Body (application/json):
+
+```
+{
+  "profile_photo_path": "{user_id}/{uuid}.{ext}"
+}
+```
+
+Error responses
+
+- `400 Bad Request` — invalid upload (unsupported extension or MIME type, invalid image content, file too large)
+- `401 Unauthorized` — authentication required or token invalid/expired
+- `403 Forbidden` — authenticated user is not allowed to upload for the requested `user_id`
+- `500 Internal Server Error` — failure saving the file or database error
+
+Example curl
+
+```
+curl -X POST "http://localhost:8000/api/profiles/123/photo/upload" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -F "file=@/path/to/photo.jpg"
+```
+
+Notes
+
+- Upload uses atomic replacement semantics: the service saves the new file to disk first, then updates the DB. If the DB update fails the newly saved file is removed. If the DB update succeeds the old file (if any) is removed.
+- File path returned is a relative path under the configured `PROFILE_PHOTO_DIR`.
+

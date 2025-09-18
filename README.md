@@ -72,3 +72,56 @@ Security guidance:
 
 Notes:
 - The application performs a fail-fast check for `JWT_SECRET` in `src/nta_user_svc/config.py` to avoid insecure runs without a signing key.
+
+### Profile photo storage
+
+This service supports storing user profile photos on disk. The storage and upload behavior is controlled by two environment variables:
+
+- `PROFILE_PHOTO_DIR` (string) — directory where uploaded profile photos are stored.
+  - Default: `/var/lib/nta_user_svc_uploads`
+  - Purpose: Root directory under which per-user subdirectories are created. Files are stored under `{PROFILE_PHOTO_DIR}/{user_id}/{uuid}.{ext}`.
+
+- `MAX_PHOTO_SIZE_BYTES` (int) — maximum allowed file size in bytes for uploaded profile photos.
+  - Default: `1048576` (1 MiB)
+  - Purpose: Prevent excessively large uploads. If a file exceeds this size the API will return `400 Bad Request`.
+
+Example `.env` entries (development):
+
+```
+PROFILE_PHOTO_DIR=/var/lib/nta_user_svc_uploads
+MAX_PHOTO_SIZE_BYTES=1048576
+```
+
+Docker-compose snippet:
+
+```yaml
+services:
+  nta_user_svc:
+    environment:
+      - PROFILE_PHOTO_DIR=${PROFILE_PHOTO_DIR}
+      - MAX_PHOTO_SIZE_BYTES=${MAX_PHOTO_SIZE_BYTES}
+```
+
+Notes and behavior:
+
+- Allowed image formats: JPEG (.jpg/.jpeg), PNG (.png), and WEBP (.webp). The service validates both the reported MIME type and the actual image content using Pillow.
+- Files are stored under a per-user directory: `{PROFILE_PHOTO_DIR}/{user_id}/` and file names are a generated UUID with the appropriate extension (e.g. `123e4567abcd.jpg`).
+- Uploads are performed with atomic semantics: the new file is saved to disk first, then the database is updated. If the DB update fails the newly saved file is removed. If the DB update succeeds the previous file is removed (failures deleting the old file are logged but do not fail the request).
+- The service attempts to create the directory if it does not exist and set restrictive permissions (0o700) where the platform supports it. On some platforms (e.g., Windows) chmod may be ineffective.
+- The service prevents path traversal and only exposes files that are descendants of `PROFILE_PHOTO_DIR`.
+- Size limits are enforced by `MAX_PHOTO_SIZE_BYTES`. Increasing this value in production requires considering storage and bandwidth implications.
+
+Developer notes / Running tests:
+
+- The file-storage tests live in `tests/test_file_storage.py` and `tests/test_photos.py`. They use pytest fixtures and monkeypatch `PROFILE_PHOTO_DIR` to a `tmp_path`.
+- To run only the photo-related tests:
+
+```
+poetry install
+poetry run pytest tests/test_file_storage.py tests/test_photos.py -q
+```
+
+- Ensure dependencies (Pillow, python-multipart) are installed — they are declared in `pyproject.toml`.
+
+- Tests use the provided fixtures in `tests/conftest.py`; do not create separate DB or TestClient fixtures when running tests locally.
+
