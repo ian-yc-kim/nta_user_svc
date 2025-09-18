@@ -8,6 +8,16 @@ import nta_user_svc.config as config
 
 logger = logging.getLogger(__name__)
 
+# OAuth2 scheme for FastAPI dependencies
+from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from nta_user_svc.models.base import get_db
+from nta_user_svc.models import User
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token containing the provided data and an expiration (exp) claim.
@@ -66,3 +76,65 @@ def verify_token(token: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(e, exc_info=True)
         raise
+
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    """FastAPI dependency to retrieve the current user from a JWT token.
+
+    - Validates token using verify_token
+    - Handles token errors and raises HTTPException(401) with WWW-Authenticate header
+    - Fetches User from DB using Session.get
+    """
+    try:
+        payload = verify_token(token)
+    except pyjwt.ExpiredSignatureError as e:
+        logger.error(e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except pyjwt.InvalidTokenError as e:
+        logger.error(e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        logger.error(e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = payload.get("user_id")
+
+    if not user_id:
+        logger.error("Token payload missing user_id")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        # Use Session.get for efficient primary-key lookup
+        user = db.get(User, user_id)
+    except Exception as e:
+        logger.error(e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return user
