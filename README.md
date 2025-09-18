@@ -125,3 +125,32 @@ poetry run pytest tests/test_file_storage.py tests/test_photos.py -q
 
 - Tests use the provided fixtures in `tests/conftest.py`; do not create separate DB or TestClient fixtures when running tests locally.
 
+
+## Profile Management
+
+This service exposes Profile CRUD endpoints for managing user profiles. Full API documentation for the profile endpoints (including request/response examples and errors) is available in `API.md` under the "Profile Management Endpoints" section.
+
+Quick summary of endpoints:
+- Create profile: POST /api/profiles (requires JWT)
+- Get own profile: GET /api/users/me/profile (requires JWT)
+- Get public profile: GET /api/profiles/{user_id} (requires JWT, returns public view excluding email)
+- Update profile: PUT /api/profiles/me (requires JWT)
+- Delete profile: DELETE /api/profiles/me (requires JWT)
+
+Developer notes for profile features:
+- Environment variables affecting profile/photo features:
+  - PROFILE_PHOTO_DIR: directory for profile photo storage (default `/var/lib/nta_user_svc_uploads`). Tests override this to a tmp path.
+  - MAX_PHOTO_SIZE_BYTES: maximum photo upload size (default 1048576 bytes).
+- Authentication: All profile endpoints require a valid JWT. Configure `JWT_SECRET` and related JWT env variables before running integration tests.
+- Running profile-related tests:
+
+```
+poetry install
+poetry run pytest tests/test_profiles_api.py -q
+```
+
+- When modifying `PROFILE_PHOTO_DIR` for local development, ensure the directory is writable by the test/process user and that you update Docker compose or .env accordingly.
+
+- Note on "public profile": currently, the public profile endpoint requires authentication (it returns `ProfilePublic` which excludes email). If you need truly unauthenticated access to public profiles, update the router dependency and document the change in `API.md` and README.
+
+
