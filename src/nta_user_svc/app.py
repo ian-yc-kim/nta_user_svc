@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 
+from nta_user_svc.routers import users_router
+
 app = FastAPI(debug=True)
 
-# add routers
+# include routers
+app.include_router(users_router, prefix="/api")
